@@ -1,0 +1,21 @@
+{
+  "name": "idev-support-bot",
+  "version": "1.0.0",
+  "description": "iDev Support Telegram Bot for customer support and donations",
+  "main": "bot.js",
+  "scripts": {
+    "start": "node bot.js",
+    "dev": "node bot.js"
+  },
+  "keywords": [
+    "telegram",
+    "bot",
+    "support",
+    "donation"
+  ],
+  "author": "iDev",
+  "license": "ISC",
+  "dependencies": {
+    "node-telegram-bot-api": "^0.66.0"
+  }
+}
