@@ -7,8 +7,9 @@ const ADMIN_ID = 7648364004;
 // Create bot instance
 const bot = new TelegramBot(TOKEN, { polling: true });
 
-// Store user states
+// Store user states and support message mappings
 const userStates = {};
+const supportMessages = {}; // Map admin message IDs to user chat IDs
 
 // Main keyboard
 const mainKeyboard = {
@@ -77,6 +78,32 @@ Kindly send a receipt of your donation. Tysm ❤️`;
   });
 });
 
+// Handle callback queries (inline button presses)
+bot.on('callback_query', async (callbackQuery) => {
+  const msg = callbackQuery.message;
+  const data = callbackQuery.data;
+  const adminId = callbackQuery.from.id;
+  
+  // Check if admin is replying to a support message
+  if (data.startsWith('reply_')) {
+    const userId = data.split('_')[1];
+    
+    // Set admin state to replying to specific user
+    userStates[adminId] = { 
+      state: 'admin_replying', 
+      replyTo: parseInt(userId) 
+    };
+    
+    // Answer callback query
+    await bot.answerCallbackQuery(callbackQuery.id, {
+      text: 'Send your reply message now'
+    });
+    
+    // Notify admin
+    await bot.sendMessage(adminId, `✍️ Reply to user ${userId}. Send your message now:`);
+  }
+});
+
 // Handle all messages
 bot.on('message', async (msg) => {
   const chatId = msg.chat.id;
@@ -91,6 +118,34 @@ bot.on('message', async (msg) => {
   
   const userState = userStates[chatId];
   
+  // Handle admin replying to user
+  if (userState && userState.state === 'admin_replying' && userId === ADMIN_ID) {
+    const targetUserId = userState.replyTo;
+    
+    try {
+      // Send reply to user
+      const replyMessage = `📢 *Feedback From Support Team*\n\n${msg.text || '[Media content]'}`;
+      await bot.sendMessage(targetUserId, replyMessage, { parse_mode: 'Markdown' });
+      
+      // If there's media, forward it too
+      if (msg.photo || msg.document || msg.video || msg.audio || msg.voice) {
+        await bot.forwardMessage(targetUserId, chatId, msg.message_id);
+      }
+      
+      // Confirm to admin
+      await bot.sendMessage(ADMIN_ID, `✅ Reply sent successfully to user ${targetUserId}`);
+      
+      // Reset admin state
+      delete userStates[ADMIN_ID];
+      
+    } catch (error) {
+      console.error('Error sending reply:', error);
+      bot.sendMessage(ADMIN_ID, `❌ Error sending reply: ${error.message}`);
+    }
+    
+    return;
+  }
+  
   // Handle support message
   if (userState && userState.state === 'awaiting_support_message') {
     try {
@@ -99,10 +154,23 @@ bot.on('message', async (msg) => {
         reply_markup: mainKeyboard
       });
       
-      // Forward message to admin
+      // Create inline reply button
+      const replyButton = {
+        inline_keyboard: [[
+          { text: '💬 Reply to User', callback_data: `reply_${userId}` }
+        ]]
+      };
+      
+      // Forward message to admin with reply button
       const adminMessage = `📨 *New Support Message*\n\nFrom: ${userName}\nUsername: ${username}\nUser ID: \`${userId}\`\n\n*Message:*\n${msg.text || '[Media/Other content]'}`;
       
-      await bot.sendMessage(ADMIN_ID, adminMessage, { parse_mode: 'Markdown' });
+      const sentMsg = await bot.sendMessage(ADMIN_ID, adminMessage, { 
+        parse_mode: 'Markdown',
+        reply_markup: replyButton
+      });
+      
+      // Store mapping for potential future use
+      supportMessages[sentMsg.message_id] = userId;
       
       // If there's media, forward it too
       if (msg.photo || msg.document || msg.video || msg.audio || msg.voice) {
